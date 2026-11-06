@@ -40,15 +40,15 @@ async fn reapply() {
     // Config lock first, then lifecycle: the repo's order. Holding both also means the config
     // read below is committed state, not a patch that may still roll back.
     let _config_write = Config::lock_config_write().await;
+    let verge = Config::verge().await.data_arc();
+    if crate::core::on_demand::is_configured(&verge) {
+        crate::core::on_demand::network_changed();
+        return;
+    }
     let manager = CoreManager::global();
     let _life = manager.lifecycle_lock.lock().await;
     // Checked under the locks: a task that queued behind a restart may be stale by now.
-    if !Config::verge()
-        .await
-        .latest_arc()
-        .enable_system_proxy
-        .unwrap_or_default()
-    {
+    if !verge.enable_system_proxy.unwrap_or_default() {
         crate::utils::resolve::dns::sync_public_dns().await;
         return;
     }

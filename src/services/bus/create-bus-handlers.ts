@@ -72,7 +72,12 @@ export const createEventBus = (deps: BusHandlerDeps) => {
         'getRuleProviders',
       ]),
     'verge://refresh-verge-config': () =>
-      deps.revalidateKeys(['getVergeConfig', 'getSystemProxy', 'getAutoProxy']),
+      deps.revalidateKeys([
+        'getVergeConfig',
+        'getSystemProxy',
+        'getAutoProxy',
+        'getOnDemandStatus',
+      ]),
     'verge://refresh-profiles': () => deps.revalidateKeys(['getProfiles']),
     'verge://refresh-proxy-config': handleRefreshProxyConfig,
     'verge://notice-message': (payload) => deps.handleNotice(payload),
@@ -87,6 +92,7 @@ export const createEventBus = (deps: BusHandlerDeps) => {
     },
     'verge://run-state-changed': (payload) => {
       deps.dispatch({ type: 'runState/loaded', runState: payload })
+      deps.revalidateKeys(['getOnDemandStatus'])
       // A running core resolves every failure shown before it.
       if (payload.mode !== 'NotRunning') forgetShownStartupError()
     },
@@ -98,7 +104,7 @@ export const createEventBus = (deps: BusHandlerDeps) => {
     // Run state is read after subscribing so an event racing the store's
     // initial read cannot leave a stale snapshot behind.
     deps.readRunState()
-    deps.revalidateKeys(['getVergeConfig'])
+    deps.revalidateKeys(['getVergeConfig', 'getOnDemandStatus'])
     deps.readPendingFailures()
     deps.handleNotice(['dns_override::auto_disabled', ''])
     deps.handleNotice(['enhance::discarded_keys', ''])

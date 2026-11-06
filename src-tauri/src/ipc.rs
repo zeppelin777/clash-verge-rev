@@ -61,6 +61,7 @@ pub fn builder() -> tauri_specta::Builder<tauri::Wry> {
             cmd::validate_dns_config,
             cmd::get_clash_logs,
             cmd::get_verge_config,
+            cmd::get_on_demand_status,
             cmd::patch_verge_config,
             cmd::test_delay,
             cmd::get_app_dir,

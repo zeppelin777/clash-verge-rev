@@ -29,6 +29,32 @@
         }
       }
     },
+    "onDemand": {
+      "title": "On-Demand Connection",
+      "enable": "Enable on-demand connection",
+      "description": "Pause enabled proxy modes on excluded Wi-Fi networks. Restore them when you leave.",
+      "exclusions": "Excluded Wi-Fi Networks",
+      "ssid": "Wi-Fi name (SSID)",
+      "addSsid": "Add",
+      "editSsid": "Edit {{ssid}}",
+      "removeSsid": "Remove {{ssid}}",
+      "invalidSsid": "Enter a Wi-Fi name of 1–32 bytes.",
+      "duplicateSsid": "This Wi-Fi network is already in the list.",
+      "status": {
+        "current": "Current status · {{status}}",
+        "disabled": "Off",
+        "empty": "Add a Wi-Fi network to exclude.",
+        "waiting": "Waiting to identify the current network.",
+        "permissionRequired": "Allow Clash Verge to use Location Services in macOS System Settings to read the Wi-Fi name.",
+        "excluded": "The current Wi-Fi network is excluded.",
+        "allowed": "The current network is allowed.",
+        "unavailable": "The current status is unavailable.",
+        "applyFailed": "One or more proxy modes could not be updated.",
+        "paused": "Paused by on-demand connection",
+        "systemProxyPaused": "System proxy paused",
+        "tunPaused": "TUN paused"
+      }
+    },
     "proxyControl": {
       "tooltips": {
         "systemProxy": "Enable to modify the operating system's proxy settings. If enabling fails, modify the operating system's proxy settings manually",

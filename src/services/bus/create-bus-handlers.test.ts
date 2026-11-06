@@ -161,7 +161,10 @@ it('drains a DNS notice after listeners mount without duplicating its live event
   expect(showNotice.info).toHaveBeenCalledExactlyOnceWith(
     'settings.modals.dns.protection.autoDisabled',
   )
-  expect(revalidateQueries).toHaveBeenCalledWith([['getVergeConfig']])
+  expect(revalidateQueries).toHaveBeenCalledWith([
+    ['getVergeConfig'],
+    ['getOnDemandStatus'],
+  ])
 })
 
 it('offers service reinstallation for a startup path refusal even before listeners mount', async () => {

@@ -61,10 +61,25 @@ pub struct Tray {
     speed_controller: speed_task::TraySpeedController,
 }
 
+#[cfg_attr(not(target_os = "macos"), allow(clippy::unused_async))]
+async fn proxy_modes(verge: &IVerge) -> (bool, bool) {
+    #[cfg(target_os = "macos")]
+    if super::on_demand::is_configured(verge) {
+        return (
+            super::proxy_control::system_proxy_applied(),
+            super::CoreManager::global().applied_tun_enabled().await,
+        );
+    }
+
+    (
+        verge.enable_system_proxy.unwrap_or(false),
+        verge.enable_tun_mode.unwrap_or(false) && crate::core::runstate::RUN_STATE.state().tun_capable(),
+    )
+}
+
 impl TrayState {
     async fn get_tray_icon(verge: &IVerge) -> (bool, Cow<'_, [u8]>) {
-        let tun_mode = verge.enable_tun_mode.unwrap_or(false) && crate::core::runstate::RUN_STATE.state().tun_capable();
-        let system_mode = verge.enable_system_proxy.unwrap_or(false);
+        let (system_mode, tun_mode) = proxy_modes(verge).await;
         let kind = if tun_mode {
             IconKind::Tun
         } else if system_mode {
@@ -283,8 +298,7 @@ impl Tray {
         let app_handle = handle::Handle::app_handle();
 
         let verge = Config::verge().await.latest_arc();
-        let system_proxy = verge.enable_system_proxy.unwrap_or(false);
-        let tun_mode = verge.enable_tun_mode.unwrap_or(false) && crate::core::runstate::RUN_STATE.state().tun_capable();
+        let (system_proxy, tun_mode) = proxy_modes(&verge).await;
 
         let switch_str = |flag: bool| {
             if flag { "on" } else { "off" }

@@ -116,7 +116,6 @@ async fn get_config_values(profile_uid: &str) -> ConfigValues {
 
     let verge_arc = verge.latest_arc();
     let IVerge {
-        ref enable_tun_mode,
         ref enable_builtin_enhanced,
         ref verge_socks_enabled,
         ref verge_http_enabled,
@@ -126,9 +125,11 @@ async fn get_config_values(profile_uid: &str) -> ConfigValues {
     let enable_external_controller = enable_external_controller.unwrap_or(false);
     let dns_settings = verge_arc.dns_settings_for(profile_uid);
     let dns_override_confirmation = dns_settings.confirmation;
+    let enable_tun = crate::core::on_demand::tun_enabled(&verge_arc)
+        && (!crate::core::on_demand::is_configured(&verge_arc)
+            || crate::core::runstate::RUN_STATE.state().tun_capable());
 
-    let (enable_tun, enable_builtin, socks_enabled, http_enabled, enable_dns_settings) = (
-        enable_tun_mode.unwrap_or(false),
+    let (enable_builtin, socks_enabled, http_enabled, enable_dns_settings) = (
         enable_builtin_enhanced.unwrap_or(true),
         verge_socks_enabled.unwrap_or(false),
         verge_http_enabled.unwrap_or(false),

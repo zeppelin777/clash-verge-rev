@@ -73,6 +73,7 @@ verge_registry! {
     enable_auto_launch => [Autostart];
     enable_silent_start => NoEffect;
     enable_system_proxy => [SystemProxy, TrayMenu, TrayTooltip, TrayIcon];
+    on_demand => NoEffect;
     enable_proxy_guard => [SystemProxy];
     enable_bypass_check => NoEffect;
     enable_dns_settings => NoEffect;

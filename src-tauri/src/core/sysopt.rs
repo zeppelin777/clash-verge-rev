@@ -1,6 +1,9 @@
 use crate::{
     config::{Config, MixedPort},
-    core::proxy_control::{self, SystemProxyStateUnknown},
+    core::{
+        on_demand,
+        proxy_control::{self, SystemProxyStateUnknown},
+    },
     singleton,
     utils::server,
 };
@@ -325,7 +328,7 @@ impl Sysopt {
         logging!(info, Type::Core, "Refreshing system proxy guard...");
         let verge = Config::verge().await.latest_arc();
         let _operation = self.guard_operation_lock.lock().await;
-        if !verge.enable_system_proxy.unwrap_or_default() {
+        if !on_demand::system_proxy_enabled(&verge) {
             logging!(info, Type::Core, "System proxy is disabled.");
             let _drained = self.stop_proxy_guard_locked().await;
             return true;

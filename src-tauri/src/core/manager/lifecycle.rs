@@ -2,6 +2,7 @@ use super::{CoreManager, RunningMode};
 use crate::config::{Config, IVerge};
 use crate::core::handle::Handle;
 use crate::core::manager::CLASH_LOGGER;
+use crate::core::on_demand;
 use crate::core::proxy_control::{self, SysproxyFailure};
 use crate::core::service::{SERVICE_MANAGER, ServiceStatus};
 use anyhow::Result;
@@ -410,10 +411,11 @@ impl CoreManager {
             // Settling on Sidecar is what makes the verdict final, so ask only once it is recorded.
             // Elevation alone carries TUN on Sidecar; a Sidecar that cannot must write it off.
             let prepared = async {
-                let tun_enabled = Config::verge().await.latest_arc().enable_tun_mode.unwrap_or(false);
-                if crate::core::runstate::RUN_STATE
-                    .state()
-                    .tun_should_be_disabled(tun_enabled)
+                let verge = Config::verge().await.latest_arc();
+                if !on_demand::is_configured(&verge)
+                    && crate::core::runstate::RUN_STATE
+                        .state()
+                        .tun_should_be_disabled(on_demand::tun_enabled(&verge))
                 {
                     tracing::Span::current().record("tun_disabled", true);
                     Config::disable_tun_and_persist().await?;
@@ -480,10 +482,11 @@ impl CoreManager {
             },
             || async {
                 // Must be asked after the uninstall: until then the Service still makes TUN capable.
-                let tun_enabled = Config::verge().await.latest_arc().enable_tun_mode.unwrap_or(false);
-                if crate::core::runstate::RUN_STATE
-                    .state()
-                    .tun_should_be_disabled(tun_enabled)
+                let verge = Config::verge().await.latest_arc();
+                if !on_demand::is_configured(&verge)
+                    && crate::core::runstate::RUN_STATE
+                        .state()
+                        .tun_should_be_disabled(on_demand::tun_enabled(&verge))
                 {
                     Config::disable_tun_and_persist().await?;
                 }
@@ -655,6 +658,33 @@ impl CoreManager {
             return Ok(());
         }
 
+        #[cfg(target_os = "macos")]
+        let paused_runtime = {
+            let verge = Config::verge().await.latest_arc();
+            let runtime = Config::runtime().await;
+            let previous = runtime.latest_arc();
+            if on_demand::is_configured(&verge)
+                && (!on_demand::tun_enabled(&verge) || !crate::core::runstate::RUN_STATE.state().tun_capable())
+                && super::config::runtime_tun_enabled(&previous)
+            {
+                // A restart can reuse a validated runtime from before the network changed.
+                let previous_draft = (!std::sync::Arc::ptr_eq(&previous, &runtime.data_arc())).then_some(previous);
+                runtime.edit_draft(|draft| {
+                    if let Some(tun) = draft
+                        .config
+                        .as_mut()
+                        .and_then(|config| config.get_mut("tun"))
+                        .and_then(serde_yaml_ng::Value::as_mapping_mut)
+                    {
+                        tun.insert("enable".into(), false.into());
+                    }
+                });
+                Some((runtime, previous_draft))
+            } else {
+                None
+            }
+        };
+
         let result = match startup {
             StartupDecision::Service => {
                 #[cfg(target_os = "windows")]
@@ -683,10 +713,22 @@ impl CoreManager {
 
         // A failed start must not leave a locally reported running mode.
         if result.is_err() {
+            #[cfg(target_os = "macos")]
+            if let Some((runtime, previous_draft)) = paused_runtime {
+                match previous_draft {
+                    Some(previous) => runtime.edit_draft(|draft| *draft = (**previous).clone()),
+                    None => runtime.discard(),
+                }
+            }
             self.rollback_failed_start().await;
             #[cfg(target_os = "macos")]
             crate::utils::resolve::dns::sync_public_dns().await;
             return result;
+        }
+
+        #[cfg(target_os = "macos")]
+        if let Some((runtime, _)) = paused_runtime {
+            runtime.apply();
         }
 
         #[cfg(target_os = "windows")]
@@ -840,7 +882,8 @@ impl CoreManager {
         #[cfg(target_os = "windows")]
         self.wait_for_service_if_needed().await;
 
-        let service_required = Config::verge().await.latest_arc().enable_tun_mode.unwrap_or(false);
+        let verge = Config::verge().await.latest_arc();
+        let service_required = !on_demand::is_configured(&verge) && on_demand::tun_enabled(&verge);
         if service_required
             && matches!(SERVICE_MANAGER.current().await, ServiceStatus::NotInstalled)
             && SERVICE_MANAGER.require_install_for_session().is_err()

@@ -120,6 +120,8 @@ export const commands = {
   getClashLogs: () => __TAURI_INVOKE<string[]>('get_clash_logs'),
   /**  获取Verge配置 */
   getVergeConfig: () => __TAURI_INVOKE<IVerge_Serialize>('get_verge_config'),
+  getOnDemandStatus: () =>
+    __TAURI_INVOKE<OnDemandStatus>('get_on_demand_status'),
   /**  修改Verge配置 */
   patchVergeConfig: (payload: IVerge_Deserialize) =>
     __TAURI_INVOKE<null>('patch_verge_config', { payload }),
@@ -399,6 +401,7 @@ export type IVerge_Deserialize = {
   enable_auto_launch?: boolean | null
   enable_silent_start?: boolean | null
   enable_system_proxy?: boolean | null
+  on_demand?: OnDemandConfig_Deserialize | null
   enable_proxy_guard?: boolean | null
   enable_bypass_check?: boolean | null
   /**  Initial DNS override preference for profiles without a saved setting. */
@@ -489,6 +492,7 @@ export type IVerge_Serialize = {
   enable_auto_launch: boolean | null
   enable_silent_start: boolean | null
   enable_system_proxy: boolean | null
+  on_demand?: OnDemandConfig_Serialize
   enable_proxy_guard: boolean | null
   enable_bypass_check: boolean | null
   /**  Initial DNS override preference for profiles without a saved setting. */
@@ -644,6 +648,35 @@ export type NoticeStatus =
   | 'config_core::change_error'
   | 'mixed_port::fallback'
   | 'mixed_port::fallback_error'
+
+export type OnDemandConfig =
+  | OnDemandConfig_Serialize
+  | OnDemandConfig_Deserialize
+
+export type OnDemandConfig_Deserialize = {
+  enabled?: boolean
+  excluded_ssids?: string[]
+}
+
+export type OnDemandConfig_Serialize = {
+  enabled: boolean
+  excluded_ssids: string[]
+}
+
+export type OnDemandState =
+  | 'disabled'
+  | 'waiting'
+  | 'permission_required'
+  | 'excluded'
+  | 'allowed'
+
+export type OnDemandStatus = {
+  state: OnDemandState
+  system_proxy_paused: boolean
+  tun_paused: boolean
+  tun_active: boolean
+  apply_failed: boolean
+}
 
 export type PendingAction =
   | 'install'

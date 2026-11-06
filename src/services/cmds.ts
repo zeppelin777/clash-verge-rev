@@ -256,6 +256,10 @@ export async function getSystemProxy() {
   return commands.getSysProxy()
 }
 
+export async function getOnDemandStatus() {
+  return commands.getOnDemandStatus()
+}
+
 export async function getAutoProxy() {
   try {
     debugLog('[API] 开始调用 get_auto_proxy')

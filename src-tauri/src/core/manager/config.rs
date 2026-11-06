@@ -52,6 +52,17 @@ impl Drop for ConfigUpdateGuard<'_> {
     }
 }
 
+#[cfg(target_os = "macos")]
+pub(super) fn runtime_tun_enabled(runtime: &IRuntime) -> bool {
+    runtime
+        .config
+        .as_ref()
+        .and_then(|config| config.get("tun"))
+        .and_then(|tun| tun.get("enable"))
+        .and_then(serde_yaml_ng::Value::as_bool)
+        .unwrap_or(false)
+}
+
 /// Avoids replacing a working core only when the service staged successfully or rejected the
 /// bundle itself; session-level failures may be repaired by replacement.
 fn plan_config_application(attempt: &StageAttempt) -> ConfigApplication {
@@ -276,6 +287,40 @@ impl CoreManager {
         }
     }
 
+    #[cfg(target_os = "macos")]
+    pub(crate) async fn applied_tun_enabled(&self) -> bool {
+        let runtime = Config::runtime().await.data_arc();
+        !matches!(*self.get_running_mode(), RunningMode::NotRunning)
+            && self.current_core_readiness_generation().is_some()
+            && runtime_tun_enabled(&runtime)
+    }
+
+    #[cfg(target_os = "macos")]
+    pub(crate) async fn reconcile_on_demand_tun(&self, config_write: &tokio::sync::MutexGuard<'_, ()>) -> Result<()> {
+        if handle::Handle::global().is_exiting() {
+            return Ok(());
+        }
+        let verge = Config::verge().await.data_arc();
+        let target = crate::core::on_demand::tun_enabled(&verge);
+        if target == self.applied_tun_enabled().await {
+            return Ok(());
+        }
+        if target && !crate::core::runstate::RUN_STATE.state().tun_capable() {
+            anyhow::bail!("TUN requires an available privileged service");
+        }
+
+        let _update = self.claim_config_update(config_write)?;
+        anyhow::ensure!(
+            self.current_core_readiness_generation().is_some(),
+            "the core must be ready before applying on-demand TUN"
+        );
+        let outcome = self.perform_config_update(None).await?;
+        if !outcome.is_valid() {
+            anyhow::bail!("{outcome}");
+        }
+        Ok(())
+    }
+
     fn should_update_config(&self) -> bool {
         let now = Instant::now();
         let last = self.get_last_update();
@@ -391,6 +436,14 @@ impl CoreManager {
                 return Err(anyhow!("core mode changed while applying service configuration"));
             }
             return self.apply_config_by_service(&path).await;
+        }
+
+        #[cfg(target_os = "macos")]
+        if matches!(*self.get_running_mode(), RunningMode::Sidecar) {
+            let state = crate::core::runstate::RUN_STATE.state();
+            if !state.is_admin && state.service_usable() && runtime_tun_enabled(&Config::runtime().await.latest_arc()) {
+                return self.restart_core_during_config_update().await;
+            }
         }
 
         let path = dirs::path_to_str(&path)?;

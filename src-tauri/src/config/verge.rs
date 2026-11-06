@@ -85,6 +85,9 @@ pub struct IVerge {
 
     pub enable_system_proxy: Option<bool>,
 
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub on_demand: Option<OnDemandConfig>,
+
     pub enable_proxy_guard: Option<bool>,
 
     pub enable_bypass_check: Option<bool>,
@@ -262,6 +265,13 @@ pub struct IVergeTheme {
     pub font_family: Option<String>,
     #[specta(type = Option<std::string::String>)]
     pub css_injection: Option<String>,
+}
+
+#[derive(Default, Debug, Clone, Deserialize, Serialize, specta::Type)]
+#[serde(default)]
+pub struct OnDemandConfig {
+    pub enabled: bool,
+    pub excluded_ssids: Vec<std::string::String>,
 }
 
 impl IVerge {
@@ -476,6 +486,7 @@ impl IVerge {
         patch_opt_field!(self, patch, verge_port);
         patch_opt_field!(self, patch, verge_http_enabled);
         patch_opt_field!(self, patch, enable_system_proxy);
+        patch_opt_field!(self, patch, on_demand);
         patch_opt_field!(self, patch, enable_proxy_guard);
         patch_opt_field!(self, patch, enable_bypass_check);
         patch_opt_field!(self, patch, use_default_bypass);

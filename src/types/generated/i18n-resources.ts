@@ -1362,6 +1362,32 @@ export interface TranslationResources {
             open: string
           }
         }
+        onDemand: {
+          addSsid: string
+          description: string
+          duplicateSsid: string
+          editSsid: string
+          enable: string
+          exclusions: string
+          invalidSsid: string
+          removeSsid: string
+          ssid: string
+          status: {
+            allowed: string
+            applyFailed: string
+            current: string
+            disabled: string
+            empty: string
+            excluded: string
+            paused: string
+            permissionRequired: string
+            systemProxyPaused: string
+            tunPaused: string
+            unavailable: string
+            waiting: string
+          }
+          title: string
+        }
         proxyControl: {
           actions: {
             installService: string

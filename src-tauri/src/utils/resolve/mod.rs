@@ -61,6 +61,8 @@ async fn resolve_setup() {
     init_startup_script().await;
     init_service_manager().await;
     let config_initialized = init_verge_config_before_window().await;
+    #[cfg(target_os = "macos")]
+    crate::core::on_demand::start().await;
     init_window().await;
     feat::reconcile_startup_tun_availability().await;
     init_resources().await;
@@ -90,6 +92,8 @@ async fn resolve_setup() {
         init_silent_updater(),
     );
 
+    #[cfg(target_os = "macos")]
+    crate::core::on_demand::network_changed();
     Handle::refresh_clash();
     refresh_tray_menu().await;
     resolve_done();

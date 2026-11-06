@@ -4,6 +4,7 @@ use crate::{
         CoreManager,
         manager::RunningMode,
         notification::{self, FailedOperation},
+        on_demand,
         runstate::RUN_STATE,
         service,
         sysopt::{Sysopt, format_bypass},
@@ -18,6 +19,8 @@ use crate::{
 use anyhow::{Result, ensure};
 use clash_verge_logging::{Type, logging};
 use clash_verge_service_ipc::{MacosProxyConfig, OwnerSessionProof, ProxyApplyOutcome};
+#[cfg(target_os = "macos")]
+use std::sync::atomic::AtomicBool;
 use std::{
     future::Future,
     sync::atomic::{AtomicU64, Ordering},
@@ -27,6 +30,9 @@ use tokio::{sync::Mutex, time::timeout};
 
 const CLEAR_ATTEMPTS: u32 = 3;
 const CLEAR_RETRY_DELAY: Duration = Duration::from_millis(100);
+
+#[cfg(target_os = "macos")]
+static SYSTEM_PROXY_APPLIED: AtomicBool = AtomicBool::new(false);
 
 /// Actionable system-proxy failure attached to an `anyhow` chain.
 ///
@@ -339,7 +345,7 @@ fn service_bypass(verge: &IVerge) -> Result<String> {
 }
 
 fn service_proxy_config(verge: &IVerge, mixed_port: u16, pac_port: u16) -> Result<MacosProxyConfig> {
-    if !verge.enable_system_proxy.unwrap_or_default() {
+    if !on_demand::system_proxy_enabled(verge) {
         return Ok(MacosProxyConfig::Disabled);
     }
 
@@ -381,7 +387,7 @@ fn service_apply_result(requested: &MacosProxyConfig, outcome: ProxyApplyOutcome
 }
 
 async fn current_service_proxy_config(verge: &IVerge) -> Result<MacosProxyConfig> {
-    if !verge.enable_system_proxy.unwrap_or_default() {
+    if !on_demand::system_proxy_enabled(verge) {
         return Ok(MacosProxyConfig::Disabled);
     }
     if verge.proxy_auto_config.unwrap_or_default() {
@@ -397,6 +403,26 @@ pub async fn has_network_service() -> bool {
     tokio::task::spawn_blocking(|| sysproxy::Sysproxy::has_network_service().unwrap_or(true))
         .await
         .unwrap_or(true)
+}
+
+#[cfg(target_os = "macos")]
+pub(crate) async fn system_proxy_is_disabled() -> Result<bool> {
+    Sysopt::global().wait_idle().await;
+    SERVICE_PROXY_OPERATIONS
+        .run_service_operation(|| async {
+            tokio::task::spawn_blocking(|| match sysproxy::Sysproxy::snapshot() {
+                Ok(snapshot) => Ok(snapshot.is_all_disabled()),
+                Err(error) if is_missing_network_service(&error) => Ok(true),
+                Err(error) => Err(error.into()),
+            })
+            .await?
+        })
+        .await
+}
+
+#[cfg(target_os = "macos")]
+pub(super) fn system_proxy_applied() -> bool {
+    SYSTEM_PROXY_APPLIED.load(Ordering::Acquire)
 }
 
 pub fn is_reportable(error: &anyhow::Error) -> bool {
@@ -481,13 +507,23 @@ fn table_effect(result: &Result<()>) -> TableEffect<'_> {
 pub async fn apply() -> Result<()> {
     let running_mode = CoreManager::global().get_running_mode();
     let verge = Config::verge().await.latest_arc();
+    let enabled = on_demand::system_proxy_enabled(&verge);
     let route = proxy_backend_route(cfg!(target_os = "macos"), &running_mode);
     tracing::Span::current().record("route", tracing::field::debug(&route));
     let result = match route {
-        ProxyBackendRoute::Local => match Sysopt::global().update_sysproxy().await {
-            Ok(()) => Ok(()),
-            Err(error) => Err(classify_local_apply_failure(error).await),
-        },
+        ProxyBackendRoute::Local => {
+            let sysopt = Sysopt::global();
+            let applied = if verge.enable_system_proxy.unwrap_or_default() && !enabled {
+                // A failed pause must not restart the guard that was enforcing the old target.
+                sysopt.reset_sysproxy().await
+            } else {
+                sysopt.update_sysproxy().await
+            };
+            match applied {
+                Ok(()) => Ok(()),
+                Err(error) => Err(classify_local_apply_failure(error).await),
+            }
+        }
         ProxyBackendRoute::Service => {
             let proxy = current_service_proxy_config(&verge).await?;
             apply_through_service(
@@ -503,6 +539,10 @@ pub async fn apply() -> Result<()> {
             .await
         }
     };
+    #[cfg(target_os = "macos")]
+    if result.is_ok() {
+        SYSTEM_PROXY_APPLIED.store(enabled, Ordering::Release);
+    }
     // Settle failures where every proxy-apply path converges.
     settle_table(
         table_effect(&result),
@@ -516,6 +556,10 @@ pub async fn apply() -> Result<()> {
 
 pub async fn clear() -> Result<()> {
     let result = clear_with_retry().await;
+    #[cfg(target_os = "macos")]
+    if result.is_ok() {
+        SYSTEM_PROXY_APPLIED.store(false, Ordering::Release);
+    }
     // Clear failures must be filed even when a restart aborts before apply.
     settle_table(
         clear_table_effect(&result),
@@ -596,7 +640,7 @@ pub async fn refresh_guard() -> Result<()> {
     }
 
     let verge = Config::verge().await.latest_arc();
-    if !verge.enable_system_proxy.unwrap_or_default() || !verge.enable_proxy_guard.unwrap_or_default() {
+    if !on_demand::system_proxy_enabled(&verge) || !verge.enable_proxy_guard.unwrap_or_default() {
         notification::retire_guard_failures();
         return Ok(());
     }

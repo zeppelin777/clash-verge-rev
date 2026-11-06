@@ -254,6 +254,10 @@ const settingsCatalog: readonly SettingEntry[] = [
     'settings.modals.sysproxy.actions.editPac': 'edit pac',
   }),
   ...group(system, {
+    'settings.sections.onDemand.title': {
+      aliases: 'SSID Wi-Fi WiFi wireless network 排除 无线网络 自动代理',
+      platforms: ['macos'],
+    },
     'settings.sections.system.fields.autoLaunch': 'auto launch ',
     'settings.sections.system.fields.silentStart': 'silent start ',
   }),

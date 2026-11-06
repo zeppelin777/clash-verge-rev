@@ -60,12 +60,7 @@ async fn ensure_effect(
         Effect::SystemProxy => {
             let _lifecycle = manager.lifecycle_lock.lock().await;
             // Disabling only writes OS state and must remain available when the Core is stopped.
-            if Config::verge()
-                .await
-                .latest_arc()
-                .enable_system_proxy
-                .unwrap_or_default()
-            {
+            if crate::core::on_demand::system_proxy_enabled(&Config::verge().await.latest_arc()) {
                 manager.apply_proxy_after_start().await?;
             } else {
                 proxy_control::apply().await?;
@@ -163,6 +158,10 @@ pub(super) async fn apply(config_write: &MutexGuard<'_, ()>, patch: Patch<'_>, e
     transaction.commit();
     match patch {
         Patch::Verge { patch, .. } => {
+            #[cfg(target_os = "macos")]
+            if patch.on_demand.is_some() || patch.enable_tun_mode.is_some() || patch.enable_system_proxy.is_some() {
+                crate::core::on_demand::configuration_changed(patch.on_demand.is_some());
+            }
             if patch.auto_check_update == Some(false) {
                 SilentUpdater::global().discard_pending();
             }

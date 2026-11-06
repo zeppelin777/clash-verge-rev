@@ -38,6 +38,14 @@ pub(super) async fn apply_verge_patch_locked(
     patch: &IVerge,
     not_save_file: bool,
 ) -> Result<()> {
+    if let Some(rule) = &patch.on_demand {
+        anyhow::ensure!(
+            rule.excluded_ssids
+                .iter()
+                .all(|ssid| (1..=32).contains(&ssid.len()) && !ssid.contains('\0')),
+            "Wi-Fi names must contain 1 to 32 UTF-8 bytes and cannot contain NUL"
+        );
+    }
     super::executor::apply(
         _config_write,
         super::executor::Patch::Verge {

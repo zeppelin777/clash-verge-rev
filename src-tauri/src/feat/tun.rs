@@ -9,7 +9,7 @@ use scopeguard::defer;
 
 use crate::{
     config::{Config, IVerge},
-    core::{handle::Handle, manager::RunningMode, runstate::RUN_STATE},
+    core::{handle::Handle, manager::RunningMode, on_demand, runstate::RUN_STATE},
 };
 
 /// Prevents recursive runtime disable writes.
@@ -21,8 +21,12 @@ static DISABLING_TUN: AtomicBool = AtomicBool::new(false);
 pub async fn reconcile_startup_tun_availability() {
     // Read fresh state after prior config writes complete.
     let _config_write = Config::lock_config_write().await;
-    let tun_enabled = Config::verge().await.data_arc().enable_tun_mode.unwrap_or(false);
-    if !RUN_STATE.state().startup_tun_should_be_disabled(tun_enabled) {
+    let verge = Config::verge().await.data_arc();
+    if on_demand::is_configured(&verge)
+        || !RUN_STATE
+            .state()
+            .startup_tun_should_be_disabled(on_demand::tun_enabled(&verge))
+    {
         return;
     }
 
@@ -54,8 +58,8 @@ pub async fn reconcile_tun_availability() {
     }
 
     // Legacy writers may still hold an uncommitted draft.
-    let tun_enabled = Config::verge().await.data_arc().enable_tun_mode.unwrap_or(false);
-    if !state.tun_should_be_disabled(tun_enabled) {
+    let verge = Config::verge().await.data_arc();
+    if on_demand::is_configured(&verge) || !state.tun_should_be_disabled(on_demand::tun_enabled(&verge)) {
         return;
     }
 

@@ -13,6 +13,7 @@ import { useTranslation } from 'react-i18next'
 import { type DialogRef, Switch, TooltipIcon } from '@/components/base'
 import { SysproxyViewer } from '@/components/setting/mods/sysproxy-viewer'
 import { TunViewer } from '@/components/setting/mods/tun-viewer'
+import { useOnDemandStatus } from '@/hooks/use-on-demand-status'
 import { useServiceUninstaller } from '@/hooks/use-service-uninstaller'
 import { useSystemProxyState } from '@/hooks/use-system-proxy-state'
 import { useSystemState } from '@/hooks/use-system-state'
@@ -29,6 +30,8 @@ interface ProxySwitchProps {
 interface SwitchRowProps {
   label: string
   active: boolean
+  preferred?: boolean
+  secondary?: string
   disabled?: boolean
   infoTitle: string
   onInfoClick?: () => void
@@ -39,13 +42,11 @@ interface SwitchRowProps {
   highlight?: boolean
 }
 
-/**
- * 抽取的子组件：统一的开关 UI
- * active = 真实状态OS/配置 乐观更新
- */
 const SwitchRow = ({
   label,
   active,
+  preferred = active,
+  secondary,
   disabled,
   infoTitle,
   onInfoClick,
@@ -55,13 +56,13 @@ const SwitchRow = ({
   highlight,
 }: SwitchRowProps) => {
   const theme = useTheme()
-  const [checked, setChecked] = useState(active)
+  const [checked, setChecked] = useState(preferred)
   const pendingRef = useRef(false)
 
   if (pendingRef.current) {
-    if (active === checked) pendingRef.current = false
-  } else if (checked !== active) {
-    setChecked(active)
+    if (preferred === checked) pendingRef.current = false
+  } else if (checked !== preferred) {
+    setChecked(preferred)
   }
 
   const handleChange = (_: React.ChangeEvent, value: boolean) => {
@@ -69,10 +70,10 @@ const SwitchRow = ({
     setChecked(value)
     onToggle(value)
       .then((applied) => {
-        if (applied === false) setChecked(active)
+        if (applied === false) setChecked(preferred)
       })
       .catch((err: any) => {
-        setChecked(active)
+        setChecked(preferred)
         onError?.(err)
       })
       .finally(() => {
@@ -102,12 +103,19 @@ const SwitchRow = ({
         ) : (
           <PauseCircleOutlineRounded sx={{ color: 'text.disabled', mr: 1 }} />
         )}
-        <Typography
-          variant="subtitle1"
-          sx={{ fontWeight: 500, fontSize: '15px' }}
-        >
-          {label}
-        </Typography>
+        <Box>
+          <Typography
+            variant="subtitle1"
+            sx={{ fontWeight: 500, fontSize: '15px' }}
+          >
+            {label}
+          </Typography>
+          {secondary && (
+            <Typography variant="caption" color="text.secondary">
+              {secondary}
+            </Typography>
+          )}
+        </Box>
         <TooltipIcon
           title={infoTitle}
           icon={SettingsRounded}
@@ -122,6 +130,7 @@ const SwitchRow = ({
         disabled={disabled}
         checked={checked}
         onChange={handleChange}
+        slotProps={{ input: { 'aria-label': label } }}
       />
     </Box>
   )
@@ -137,6 +146,7 @@ const ProxyControlSwitches = ({
   const { uninstallServiceAndStartSidecar } = useServiceUninstaller()
   const { indicator: systemProxyIndicator, toggleSystemProxy } =
     useSystemProxyState()
+  const { data: onDemand } = useOnDemandStatus()
   const { runState, isTunModeAvailable, isLoading } = useSystemState()
   // Offer to uninstall only a service that is actually there and working.
   const isServiceInstallReady = runState.serviceUsable
@@ -144,7 +154,17 @@ const ProxyControlSwitches = ({
   const sysproxyRef = useRef<DialogRef>(null)
   const tunRef = useRef<DialogRef>(null)
 
-  const { enable_tun_mode } = verge ?? {}
+  const { enable_system_proxy, enable_tun_mode } = verge ?? {}
+  const managedOnDemand = onDemand && onDemand.state !== 'disabled'
+  const systemProxyPaused =
+    !!enable_system_proxy && !!onDemand?.system_proxy_paused
+  const tunPaused = !!enable_tun_mode && !!onDemand?.tun_paused
+  const systemProxyActive = systemProxyIndicator && !systemProxyPaused
+  const tunActive =
+    managedOnDemand || onDemand?.apply_failed
+      ? !!onDemand?.tun_active
+      : !!enable_tun_mode && isTunModeAvailable
+  const pausedLabel = t('settings.sections.onDemand.status.paused')
 
   // Enabling needs a running core; disabling only writes OS state and must stay available.
   const handleSystemProxyToggle = async (value: boolean) => {
@@ -184,24 +204,34 @@ const ProxyControlSwitches = ({
       {isSystemProxyMode && (
         <SwitchRow
           label={t('settings.sections.proxyControl.fields.systemProxy')}
-          active={systemProxyIndicator}
+          active={systemProxyActive}
+          preferred={
+            managedOnDemand || systemProxyPaused
+              ? !!enable_system_proxy
+              : undefined
+          }
+          secondary={systemProxyPaused ? pausedLabel : undefined}
           infoTitle={t('settings.sections.proxyControl.tooltips.systemProxy')}
           onInfoClick={() => sysproxyRef.current?.open()}
           onToggle={handleSystemProxyToggle}
           onError={onError}
-          highlight={systemProxyIndicator}
+          highlight={systemProxyActive}
         />
       )}
 
       {isTunMode && (
         <SwitchRow
           label={t('settings.sections.proxyControl.fields.tunMode')}
-          active={(enable_tun_mode && isTunModeAvailable) || false}
+          active={tunActive}
+          preferred={
+            managedOnDemand || tunPaused ? !!enable_tun_mode : undefined
+          }
+          secondary={tunPaused ? pausedLabel : undefined}
           infoTitle={t('settings.sections.proxyControl.tooltips.tunMode')}
           onInfoClick={() => tunRef.current?.open()}
           onToggle={handleTunToggle}
           onError={onError}
-          highlight={(enable_tun_mode && isTunModeAvailable) || false}
+          highlight={tunActive}
           extraIcons={
             <>
               {!isTunModeAvailable && (

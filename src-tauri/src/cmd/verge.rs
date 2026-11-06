@@ -7,6 +7,12 @@ use crate::{
 };
 use clash_verge_draft::SharedDraft;
 
+#[tauri::command]
+#[specta::specta]
+pub async fn get_on_demand_status() -> crate::core::on_demand::OnDemandStatus {
+    crate::core::on_demand::status().await
+}
+
 /// 获取Verge配置
 #[tauri::command]
 #[specta::specta]

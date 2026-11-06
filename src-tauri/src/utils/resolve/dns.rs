@@ -6,6 +6,7 @@ use std::{
     os::unix::process::CommandExt as _,
     path::PathBuf,
     process::{Command, Stdio},
+    sync::atomic::{AtomicBool, Ordering},
     time::{Duration, Instant},
 };
 use tokio::sync::Mutex;
@@ -16,6 +17,11 @@ const PLACEHOLDER_DNS: &str = "114.114.114.114\n223.5.5.5\n1.1.1.1";
 pub(crate) const DNS_SCRIPT_TIMEOUT: Duration = Duration::from_secs(5);
 
 static DNS_LOCK: Mutex<()> = Mutex::const_new(());
+static SYNC_FAILED: AtomicBool = AtomicBool::new(false);
+
+pub(crate) fn sync_failed() -> bool {
+    SYNC_FAILED.load(Ordering::Relaxed)
+}
 
 fn dns_state_dir() -> anyhow::Result<PathBuf> {
     // The DNS scripts persist their backups relative to their working directory.
@@ -55,11 +61,12 @@ pub async fn sync_public_dns() {
     }
     let core_running = !matches!(*CoreManager::global().get_running_mode(), RunningMode::NotRunning);
     let runtime = Config::runtime().await.latest_arc();
-    if core_running && runtime.config.as_ref().is_some_and(needs_public_dns) {
-        set_public_dns().await;
+    let result = if core_running && runtime.config.as_ref().is_some_and(needs_public_dns) {
+        set_public_dns().await
     } else {
-        let _ = unset_public_dns().await;
-    }
+        unset_public_dns().await
+    };
+    SYNC_FAILED.store(result.is_err(), Ordering::Relaxed);
 }
 
 pub async fn restore_public_dns() -> anyhow::Result<()> {
@@ -67,16 +74,17 @@ pub async fn restore_public_dns() -> anyhow::Result<()> {
     unset_public_dns().await
 }
 
-async fn set_public_dns() {
+async fn set_public_dns() -> anyhow::Result<()> {
     logging!(debug, Type::Config, "try to set system dns");
     let result = run_dns_script("set_dns.sh", true).await;
-    match result {
+    match &result {
         Ok(DnsScriptOutcome::Complete) => logging!(info, Type::Config, "set system dns successfully"),
         Ok(DnsScriptOutcome::Deferred) => {
             logging!(debug, Type::Config, "system DNS waits for a primary network service")
         }
         Err(err) => logging!(error, Type::Config, "set system dns failed: {err:#}"),
     }
+    result.map(|_| ())
 }
 
 async fn unset_public_dns() -> anyhow::Result<()> {

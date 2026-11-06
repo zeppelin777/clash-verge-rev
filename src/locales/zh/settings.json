@@ -29,6 +29,32 @@
         }
       }
     },
+    "onDemand": {
+      "title": "按需连接",
+      "enable": "启用按需连接",
+      "description": "连上排除的 Wi-Fi 时，暂停已开启的系统代理和虚拟网卡。离开后按原开关设置恢复。",
+      "exclusions": "排除的 Wi-Fi",
+      "ssid": "Wi-Fi 名称（SSID）",
+      "addSsid": "添加",
+      "editSsid": "编辑 {{ssid}}",
+      "removeSsid": "移除 {{ssid}}",
+      "invalidSsid": "请输入长度为 1–32 字节的 Wi-Fi 名称。",
+      "duplicateSsid": "此 Wi-Fi 已在列表中。",
+      "status": {
+        "current": "当前状态 · {{status}}",
+        "disabled": "已关闭",
+        "empty": "请添加要排除的 Wi-Fi。",
+        "waiting": "正在等待识别当前网络。",
+        "permissionRequired": "请在 macOS 系统设置中允许 Clash Verge 使用定位服务，以读取 Wi-Fi 名称。",
+        "excluded": "当前 Wi-Fi 在排除列表中。",
+        "allowed": "当前网络未被排除。",
+        "unavailable": "暂时无法读取当前状态。",
+        "applyFailed": "部分代理模式未能切换。",
+        "paused": "已按需暂停",
+        "systemProxyPaused": "系统代理已暂停",
+        "tunPaused": "虚拟网卡已暂停"
+      }
+    },
     "proxyControl": {
       "tooltips": {
         "systemProxy": "修改操作系统的代理设置，如果开启失败，可手动修改操作系统的代理设置",

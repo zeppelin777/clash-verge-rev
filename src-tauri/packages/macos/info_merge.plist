@@ -2,6 +2,8 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+    <key>NSLocationUsageDescription</key>
+    <string>Clash Verge uses location permission to read the current Wi-Fi name and apply your on-demand connection settings.</string>
     <key>AssociatedBundleIdentifiers</key>
     <array>
         <string>io.github.clash-verge-rev.clash-verge-rev.service</string>
